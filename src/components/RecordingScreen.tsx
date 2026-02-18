@@ -16,7 +16,34 @@ const RecordingScreen = ({ onOpenArchive }: RecordingScreenProps) => {
   const [eventDetected, setEventDetected] = useState(false);
   const [batterySaver, setBatterySaver] = useState(false);
   const [battery, setBattery] = useState(82);
+  const [cameraActive, setCameraActive] = useState(false);
   const intervalRef = useRef<number | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  // Camera access
+  useEffect(() => {
+    const startCamera = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false,
+        });
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+        setCameraActive(true);
+      } catch (err) {
+        console.log("Camera not available, using fallback image");
+        setCameraActive(false);
+      }
+    };
+    startCamera();
+    return () => {
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+    };
+  }, []);
 
   // Timer
   useEffect(() => {
@@ -145,14 +172,24 @@ const RecordingScreen = ({ onOpenArchive }: RecordingScreenProps) => {
 
       {/* Live Video Feed Area */}
       <div className="flex-1 relative mx-3 rounded-xl overflow-hidden bg-secondary/50">
-        {/* Simulated camera feed */}
+        {/* Live camera feed or fallback */}
         <div className="absolute inset-0">
-          <img
-            src={dashcamRoad}
-            alt="Live dashcam feed"
-            className="w-full h-full object-cover"
-          />
-          {/* Subtle scanline overlay for realism */}
+          {cameraActive ? (
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <img
+              src={dashcamRoad}
+              alt="Live dashcam feed"
+              className="w-full h-full object-cover"
+            />
+          )}
+          {/* Subtle scanline overlay */}
           <div
             className="absolute inset-0 opacity-[0.04] pointer-events-none"
             style={{
