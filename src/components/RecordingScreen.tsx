@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import dashcamRoad from "@/assets/dashcam-road.jpg";
 
 interface RecordingScreenProps {
   onOpenArchive: () => void;
@@ -145,21 +146,19 @@ const RecordingScreen = ({ onOpenArchive }: RecordingScreenProps) => {
       {/* Live Video Feed Area */}
       <div className="flex-1 relative mx-3 rounded-xl overflow-hidden bg-secondary/50">
         {/* Simulated camera feed */}
-        <div className="absolute inset-0 bg-gradient-to-br from-secondary via-muted to-secondary">
-          {/* Grid overlay */}
+        <div className="absolute inset-0">
+          <img
+            src={dashcamRoad}
+            alt="Live dashcam feed"
+            className="w-full h-full object-cover"
+          />
+          {/* Subtle scanline overlay for realism */}
           <div
-            className="absolute inset-0 opacity-[0.06]"
+            className="absolute inset-0 opacity-[0.04] pointer-events-none"
             style={{
-              backgroundImage: `linear-gradient(hsl(var(--foreground) / 0.3) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--foreground) / 0.3) 1px, transparent 1px)`,
-              backgroundSize: "60px 60px",
+              backgroundImage: `repeating-linear-gradient(0deg, transparent, transparent 2px, hsl(var(--foreground) / 0.1) 2px, hsl(var(--foreground) / 0.1) 3px)`,
             }}
           />
-          {/* Center crosshair */}
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-16 h-16 border border-muted-foreground/20 rounded-full flex items-center justify-center">
-              <div className="w-1 h-1 rounded-full bg-muted-foreground/40" />
-            </div>
-          </div>
         </div>
 
         {/* Telemetry Overlay */}
