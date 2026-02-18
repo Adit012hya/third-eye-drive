@@ -1,12 +1,30 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import { useState } from "react";
+import { AnimatePresence } from "framer-motion";
+import IntroScreen from "@/components/IntroScreen";
+import RecordingScreen from "@/components/RecordingScreen";
+import ArchiveScreen from "@/components/ArchiveScreen";
+
+type Screen = "intro" | "recording" | "archive";
 
 const Index = () => {
+  const [screen, setScreen] = useState<Screen>("intro");
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="text-center">
-        <h1 className="mb-4 text-4xl font-bold">Welcome to Your Blank App</h1>
-        <p className="text-xl text-muted-foreground">Start building your amazing project here!</p>
-      </div>
+    <div className="max-w-md mx-auto h-screen overflow-hidden bg-background relative">
+      <AnimatePresence mode="wait">
+        {screen === "intro" && (
+          <IntroScreen key="intro" onComplete={() => setScreen("recording")} />
+        )}
+        {screen === "recording" && (
+          <RecordingScreen
+            key="recording"
+            onOpenArchive={() => setScreen("archive")}
+          />
+        )}
+        {screen === "archive" && (
+          <ArchiveScreen key="archive" onBack={() => setScreen("recording")} />
+        )}
+      </AnimatePresence>
     </div>
   );
 };
