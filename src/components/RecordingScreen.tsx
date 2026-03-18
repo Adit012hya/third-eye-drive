@@ -32,6 +32,9 @@ const RecordingScreen = ({ onOpenArchive }: RecordingScreenProps) => {
   const [micActive, setMicActive] = useState(false);
   const [needsGyroPermission, setNeedsGyroPermission] = useState(false);
   const [isSOSOpen, setIsSOSOpen] = useState(false);
+  const [permissionsGranted, setPermissionsGranted] = useState<boolean>(() => {
+    return localStorage.getItem("permissions_granted") === "true";
+  });
 
   const intervalRef = useRef<number | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -53,6 +56,8 @@ const RecordingScreen = ({ onOpenArchive }: RecordingScreenProps) => {
 
   // Camera + mic access + check iOS Gyro Requirements
   useEffect(() => {
+    if (!permissionsGranted) return;
+
     if (typeof DeviceMotionEvent !== "undefined" && typeof (DeviceMotionEvent as any).requestPermission === "function") {
       setNeedsGyroPermission(true);
     }
@@ -100,6 +105,10 @@ const RecordingScreen = ({ onOpenArchive }: RecordingScreenProps) => {
             console.warn("Camera not available:", e);
             setCameraActive(false);
             setMicActive(false);
+            if (e instanceof DOMException && (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError')) {
+              setPermissionsGranted(false);
+              localStorage.removeItem("permissions_granted");
+            }
           }
         }
       }
@@ -110,7 +119,7 @@ const RecordingScreen = ({ onOpenArchive }: RecordingScreenProps) => {
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
     };
-  }, [settings.videoQuality]);
+  }, [settings.videoQuality, permissionsGranted]);
 
   // Attach stream to video when both are ready (video mounts after cameraActive becomes true)
   useEffect(() => {
@@ -165,6 +174,7 @@ const RecordingScreen = ({ onOpenArchive }: RecordingScreenProps) => {
 
   // Speed from Geolocation
   useEffect(() => {
+    if (!permissionsGranted) return;
     if (!navigator.geolocation) return;
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
@@ -188,7 +198,7 @@ const RecordingScreen = ({ onOpenArchive }: RecordingScreenProps) => {
       { enableHighAccuracy: true, maximumAge: 2000 }
     );
     return () => navigator.geolocation.clearWatch(watchId);
-  }, []);
+  }, [permissionsGranted]);
 
   // Gyro from DeviceMotion (Passively bound, awaits permission on iOS)
   useEffect(() => {
@@ -225,6 +235,7 @@ const RecordingScreen = ({ onOpenArchive }: RecordingScreenProps) => {
 
   // Battery
   useEffect(() => {
+    if (!permissionsGranted) return;
     if (!("getBattery" in navigator)) return;
     (navigator as Navigator & { getBattery: () => Promise<any> })
       .getBattery()
@@ -235,7 +246,7 @@ const RecordingScreen = ({ onOpenArchive }: RecordingScreenProps) => {
         return () => bat.removeEventListener("levelchange", update);
       })
       .catch(() => setBattery(null));
-  }, []);
+  }, [permissionsGranted]);
 
   // Timer and auto-stop
   useEffect(() => {
@@ -480,6 +491,75 @@ const RecordingScreen = ({ onOpenArchive }: RecordingScreenProps) => {
     startRecording();
   };
   const handleStop = () => stopRecording();
+
+  const handleRequestPermissions = async () => {
+    try {
+      // 1. Storage
+      if (navigator.storage && navigator.storage.persist) {
+        await navigator.storage.persist().catch(() => {});
+      }
+      
+      // 2. Location
+      await new Promise<void>((resolve, reject) => {
+        if (!navigator.geolocation) { resolve(); return; }
+        navigator.geolocation.getCurrentPosition(
+          () => resolve(), 
+          (err) => reject(err), 
+          { enableHighAccuracy: true }
+        );
+      });
+
+      // 3. Camera & Mic
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true }).catch(async (err) => {
+         // Fallback to video only
+         return await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      });
+      stream.getTracks().forEach(t => t.stop());
+
+      // 4. Motion (iOS)
+      if (typeof DeviceMotionEvent !== "undefined" && typeof (DeviceMotionEvent as any).requestPermission === "function") {
+        await (DeviceMotionEvent as any).requestPermission().catch(() => {});
+        setNeedsGyroPermission(false);
+      }
+
+      setPermissionsGranted(true);
+      localStorage.setItem("permissions_granted", "true");
+    } catch (e) {
+      console.error("Permission denied", e);
+      alert("Please check your phone settings and allow Camera, Microphone, and Location permissions to use the dashcam.");
+    }
+  };
+
+  if (!permissionsGranted) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="h-full bg-background flex flex-col items-center justify-center p-6"
+      >
+        <div className="glass-panel p-8 rounded-2xl max-w-sm w-full text-center border-2 border-primary/20 shadow-2xl shadow-primary/10">
+          <div className="w-16 h-16 mx-auto bg-primary/20 rounded-full flex items-center justify-center mb-6">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="hsl(var(--primary))" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/>
+            </svg>
+          </div>
+          <h2 className="font-display text-xl font-bold text-foreground mb-3">Permissions Required</h2>
+          <p className="font-mono text-xs text-muted-foreground mb-8 leading-relaxed">
+            To function correctly as a dashcam on your device, Third Eye Drive requires access to your:<br/><br/>
+            <strong className="text-foreground">Camera & Mic</strong> (for recording)<br/>
+            <strong className="text-foreground">Location</strong> (for speed tracking)<br/>
+            <strong className="text-foreground">Storage</strong> (for saving clips)
+          </p>
+          <button
+            onClick={handleRequestPermissions}
+            className="w-full py-4 rounded-xl font-display font-bold text-sm bg-primary text-primary-foreground hover:brightness-110 active:scale-95 transition-all shadow-lg shadow-primary/25 tracking-wide"
+          >
+            GRANT PERMISSIONS
+          </button>
+        </div>
+      </motion.div>
+    );
+  }
 
   // Battery saver mode
   if (batterySaver) {
