@@ -47,6 +47,10 @@ const RecordingScreen = ({ onOpenArchive }: RecordingScreenProps) => {
   const speedRef = useRef<number | null>(null);
   speedRef.current = speed;
 
+  const activeRecordingReasonRef = useRef<ClipReason>("Manual Save");
+  const activeRecordingLockedRef = useRef<boolean>(false);
+  const finishAtSegmentDurationRef = useRef<boolean>(false);
+
   // Camera + mic access + check iOS Gyro Requirements
   useEffect(() => {
     if (typeof DeviceMotionEvent !== "undefined" && typeof (DeviceMotionEvent as any).requestPermission === "function") {
@@ -233,15 +237,50 @@ const RecordingScreen = ({ onOpenArchive }: RecordingScreenProps) => {
       .catch(() => setBattery(null));
   }, []);
 
-  // Timer
+  // Timer and auto-stop
   useEffect(() => {
     if (isRecording) {
       intervalRef.current = window.setInterval(() => setSeconds((s) => s + 1), 1000);
+    } else {
+      setSeconds(0);
     }
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, [isRecording]);
+
+  useEffect(() => {
+    if (isRecording && finishAtSegmentDurationRef.current && seconds >= settings.segmentDurationSec) {
+      console.log(`Segment duration (${settings.segmentDurationSec}s) reached, stopping auto-recording.`);
+      const rec = recorderRef.current;
+      if (rec && rec.state !== "inactive") {
+        try {
+          rec.stop();
+        } catch (e) {
+          console.error("Failed to stop recorder:", e);
+        }
+        recorderRef.current = null;
+        setIsRecording(false);
+        if (intervalRef.current) clearInterval(intervalRef.current);
+
+        const reason = activeRecordingReasonRef.current;
+        const locked = activeRecordingLockedRef.current;
+
+        (async () => {
+          try {
+            if (rec.state !== "inactive") {
+              await new Promise<void>((r) => { rec.onstop = () => r(); });
+            }
+            await saveRecordingAsClip(reason, locked);
+          } catch (err) {
+            console.error("Error saving auto-trigger clip:", err);
+          }
+        })();
+      }
+    }
+  }, [seconds, settings.segmentDurationSec, isRecording]);
+
+
 
   const lastAutoLockRef = useRef(0);
   // Auto event detection (audio spike / impact from gyro) - triggers lock using sensitivities
@@ -264,15 +303,14 @@ const RecordingScreen = ({ onOpenArchive }: RecordingScreenProps) => {
       const reason: ClipReason = audioIncident ? "Audio Event" : "Impact Event";
       
       if (!isRecording) {
-        // Automatically start recording when an event crosses threshold
         if (cameraActive && streamRef.current && recorderRef.current?.state !== "recording") {
           console.log(`Auto-starting recording due to ${reason}`);
+          activeRecordingReasonRef.current = reason;
+          activeRecordingLockedRef.current = true;
+          finishAtSegmentDurationRef.current = true;
           startRecording();
-          // We immediately lock it so we save it a few seconds later, or we can just let it run.
-          // By default let's let it run until they manually hit STOP or another trigger locks it.
         }
       } else {
-        // We are already recording, so lock & save this clip, then restart
         const rec = recorderRef.current;
         if (rec && rec.state !== "inactive") {
           try {
@@ -281,13 +319,22 @@ const RecordingScreen = ({ onOpenArchive }: RecordingScreenProps) => {
             console.error("Failed to stop recorder cleanly:", e);
           }
           recorderRef.current = null;
+          const oldReason = activeRecordingReasonRef.current;
+          const oldLocked = activeRecordingLockedRef.current;
+          
           (async () => {
             try {
               if (rec.state !== "inactive") {
                 await new Promise<void>((r) => { rec.onstop = () => r(); });
               }
-              await saveRecordingAsClip(reason, true);
-              if (streamRef.current) startRecording();
+              await saveRecordingAsClip(oldReason, oldLocked);
+              
+              if (streamRef.current) {
+                activeRecordingReasonRef.current = reason;
+                activeRecordingLockedRef.current = true;
+                finishAtSegmentDurationRef.current = true;
+                startRecording();
+              }
             } catch (error) {
               console.error("Error in auto-trigger save:", error);
             }
@@ -383,7 +430,7 @@ const RecordingScreen = ({ onOpenArchive }: RecordingScreenProps) => {
         rec.onstop = () => r();
         if (rec.state === "inactive") r();
       });
-      await saveRecordingAsClip("Manual Save", false);
+      await saveRecordingAsClip(activeRecordingReasonRef.current, activeRecordingLockedRef.current);
       console.log("Recording stopped successfully");
     } catch (error) {
       console.error("Error stopping recording:", error);
@@ -401,21 +448,37 @@ const RecordingScreen = ({ onOpenArchive }: RecordingScreenProps) => {
       rec.stop();
       recorderRef.current = null;
 
+      const oldReason = activeRecordingReasonRef.current;
+      const oldLocked = activeRecordingLockedRef.current;
+
       await new Promise<void>((r) => {
         rec.onstop = () => r();
         if (rec.state === "inactive") r();
       });
-      await saveRecordingAsClip("Locked Event", true);
+      // Save previously recorded portion
+      await saveRecordingAsClip(oldReason, oldLocked);
+      
       setEventDetected(true);
       setTimeout(() => setEventDetected(false), 3000);
-      if (streamRef.current) startRecording();
+      
+      if (streamRef.current) {
+        activeRecordingReasonRef.current = "Locked Event";
+        activeRecordingLockedRef.current = true;
+        finishAtSegmentDurationRef.current = true;
+        startRecording();
+      }
       console.log("Lock saved and new recording started");
     } catch (error) {
       console.error("Error locking recording:", error);
     }
   };
 
-  const handleStart = () => startRecording();
+  const handleStart = () => {
+    activeRecordingReasonRef.current = "Manual Save";
+    activeRecordingLockedRef.current = false;
+    finishAtSegmentDurationRef.current = false;
+    startRecording();
+  };
   const handleStop = () => stopRecording();
 
   // Battery saver mode
