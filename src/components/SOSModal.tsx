@@ -30,6 +30,25 @@ export function SOSModal({ isOpen, onClose, location }: SOSModalProps) {
     window.open(`https://wa.me/${phone.replace(/[^0-9]/g, "")}?text=Emergency! I need help. ${getMapsLink()}`);
   };
 
+  const handleShareLocation = async () => {
+    const text = "Emergency! Here is my current location.";
+    const url = getMapsLink();
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: "My Location",
+          text,
+          url,
+        });
+      } catch (err) {
+        console.error("Error sharing location", err);
+      }
+    } else {
+      navigator.clipboard.writeText(`${text} ${url}`);
+      alert("Location link copied to clipboard");
+    }
+  };
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -72,33 +91,8 @@ export function SOSModal({ isOpen, onClose, location }: SOSModalProps) {
                 </button>
               </div>
 
-              {/* Location Card */}
-              <div className="border border-border/50 rounded-xl p-4 bg-secondary mb-5">
-                <div className="flex items-center gap-2 mb-3">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground">
-                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-                    <circle cx="12" cy="10" r="3" />
-                  </svg>
-                  <span className="text-xs font-bold text-muted-foreground tracking-widest uppercase">Current Location</span>
-                </div>
-                <div className="flex gap-8">
-                  <div>
-                    <p className="text-[10px] font-bold text-muted-foreground/70 tracking-wider mb-1 uppercase">Latitude</p>
-                    <p className="text-safe font-mono font-medium tracking-wide">
-                      {location ? location.lat.toFixed(6) : "Fetching..."}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold text-muted-foreground/70 tracking-wider mb-1 uppercase">Longitude</p>
-                    <p className="text-safe font-mono font-medium tracking-wide">
-                      {location ? location.lon.toFixed(6) : "Fetching..."}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
               {/* Main Actions */}
-              <div className="mb-6">
+              <div className="mb-6 flex flex-col gap-3">
                 <button 
                   onClick={() => handleCall(contacts[0]?.phone || "112")}
                   className="w-full flex items-center justify-center gap-3 bg-destructive hover:bg-destructive/90 active:scale-[0.98] transition-all text-white py-4 rounded-xl font-bold text-lg"
@@ -107,6 +101,17 @@ export function SOSModal({ isOpen, onClose, location }: SOSModalProps) {
                     <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
                   </svg>
                   Call Primary Contact
+                </button>
+                <button 
+                  onClick={handleShareLocation}
+                  className="w-full flex items-center justify-center gap-3 bg-primary hover:bg-primary/90 active:scale-[0.98] transition-all text-white py-4 rounded-xl font-bold text-lg"
+                >
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+                    <polyline points="16 6 12 2 8 6" />
+                    <line x1="12" y1="2" x2="12" y2="15" />
+                  </svg>
+                  Share Location
                 </button>
               </div>
 

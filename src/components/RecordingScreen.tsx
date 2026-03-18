@@ -575,9 +575,6 @@ const RecordingScreen = ({ onOpenArchive }: RecordingScreenProps) => {
                 <div className="telemetry-text text-xs">
                   SPEED: <span className="text-foreground font-semibold">{speed !== null ? `${speed} km/h` : "—"}</span>
                 </div>
-                <div className="telemetry-text text-[10px] opacity-80 mt-0.5">
-                  LOC: {location ? `${location.lat.toFixed(5)}, ${location.lon.toFixed(5)}` : "—"}
-                </div>
               </div>
               <div className="telemetry-text text-xs">
                 GYRO: <span className="text-foreground font-semibold">{gyro}g</span>
